@@ -94,7 +94,8 @@ void get_offset_datetime(DateTime* datetime) {
     furi_hal_rtc_get_datetime(&offset_time);
     uint32_t unix_timestamp =
         datetime_datetime_to_timestamp(&offset_time) + TIME_OFFSET_MINUTES * 60;
-    datetime_timestamp_to_datetime(unix_timestamp, datetime);
+    datetime_timestamp_to_datetime(unix_timestamp, &offset_time);
+    *datetime = offset_time;
 }
 
 int dcf77_clock_sync_app_main(void* p) {
@@ -102,7 +103,7 @@ int dcf77_clock_sync_app_main(void* p) {
 
     AppData* app = malloc(sizeof(AppData));
     get_offset_datetime(&app->dt);
-    app->is_dst = false;
+    app->is_dst = true;
     app->str = furi_string_alloc();
     app->tim_fmt = locale_get_time_format();
     app->dat_fmt = locale_get_date_format();
