@@ -1,4 +1,4 @@
-# Flipper-Zero DCF77 Clock Sync
+# Flipper-Zero DCF77 Clock Spoof
 
 > Info: Currently the app is still under development and not ready to use
 
