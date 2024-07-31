@@ -90,8 +90,10 @@ void set_time(AppData* app, int offset) {
 
 // Get datetime with offset
 void get_offset_datetime(DateTime* datetime) {
-    furi_hal_rtc_get_datetime(datetime);
-    uint32_t unix_timestamp = datetime_datetime_to_timestamp(datetime) + TIME_OFFSET_MINUTES * 60;
+    DateTime offset_time;
+    furi_hal_rtc_get_datetime(&offset_time);
+    uint32_t unix_timestamp =
+        datetime_datetime_to_timestamp(&offset_time) + TIME_OFFSET_MINUTES * 60;
     datetime_timestamp_to_datetime(unix_timestamp, datetime);
 }
 
