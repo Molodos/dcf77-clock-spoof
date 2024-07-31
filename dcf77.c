@@ -1,12 +1,12 @@
 #include "dcf77.h"
 
-#define DST_BIT 17
-#define MIN_BIT 21
-#define HOUR_BIT 29
-#define DAY_BIT 36
+#define DST_BIT     17
+#define MIN_BIT     21
+#define HOUR_BIT    29
+#define DAY_BIT     36
 #define WEEKDAY_BIT 42
-#define MONTH_BIT 45
-#define YEAR_BIT 50
+#define MONTH_BIT   45
+#define YEAR_BIT    50
 
 static uint8_t dcf77_bits[] = {
     0, // 00: Start of minute

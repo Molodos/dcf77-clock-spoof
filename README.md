@@ -1,6 +1,6 @@
 # Flipper-Zero DCF77 Clock Spoof
 
-> Info: Currently the app is still under development and not ready to use
+> Info: Currently the app is still under development and just sending time with an offset of 5 minutes (hopefully)
 
 Spoofs a [DCF77](https://en.wikipedia.org/wiki/DCF77) time signal on the RFID antenna and on GPIO A4 pin.
 

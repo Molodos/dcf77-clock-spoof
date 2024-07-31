@@ -9,14 +9,16 @@
 
 #include "dcf77.h"
 
-#define SCREEN_SIZE_X 128
-#define SCREEN_SIZE_Y 64
-#define DCF77_FREQ 77500
-#define DCF77_OFFSET 60
-#define SYNC_DELAY 50
+#define SCREEN_SIZE_X       128
+#define SCREEN_SIZE_Y       64
+#define DCF77_FREQ          77500
+#define DCF77_OFFSET        60
+#define SYNC_DELAY          50
+#define TIME_OFFSET_MINUTES 5
 
 char* WEEKDAYS[] = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
 
+// App structure
 typedef struct {
     DateTime dt;
     bool is_dst;
@@ -25,6 +27,7 @@ typedef struct {
     LocaleDateFormat dat_fmt;
 } AppData;
 
+// Draw app
 static void app_draw_callback(Canvas* canvas, void* context) {
     AppData* app = (AppData*)context;
     furi_assert(app->str);
@@ -85,11 +88,18 @@ void set_time(AppData* app, int offset) {
     set_dcf77_time(&dcf_dt, app->is_dst);
 }
 
+// Get datetime with offset
+void get_offset_datetime(DateTime* datetime) {
+    furi_hal_rtc_get_datetime(datetime);
+    uint32_t unix_timestamp = datetime_datetime_to_timestamp(datetime) + TIME_OFFSET_MINUTES * 60;
+    datetime_timestamp_to_datetime(unix_timestamp, datetime);
+}
+
 int dcf77_clock_sync_app_main(void* p) {
     UNUSED(p);
 
     AppData* app = malloc(sizeof(AppData));
-    furi_hal_rtc_get_datetime(&app->dt);
+    get_offset_datetime(&app->dt);
     app->is_dst = false;
     app->str = furi_string_alloc();
     app->tim_fmt = locale_get_time_format();
@@ -114,54 +124,82 @@ int dcf77_clock_sync_app_main(void* p) {
     bool exit = false;
     int sec = app->dt.second;
     while(!exit) {
+        // Define variable
         int silence_ms = 0;
-        // wait next second
-        while(app->dt.second == sec) furi_hal_rtc_get_datetime(&app->dt);
 
+        // Wait for next second
+        while(app->dt.second == sec) {
+            get_offset_datetime(&app->dt);
+        }
+
+        // Control antennas
         if(app->dt.second < 59) {
+            // Stop if running
             if(running) {
+                // Turn led off and stop everything
                 furi_hal_light_set(LightRed | LightGreen | LightBlue, 0);
                 furi_hal_rfid_tim_read_stop();
                 furi_hal_pwm_stop(FuriHalPwmOutputIdLptim2PA4);
                 furi_hal_gpio_init(
                     &gpio_ext_pa4, GpioModeOutputPushPull, GpioPullNo, GpioSpeedVeryHigh);
             }
+
+            // Pause 200ms for a one and 100ms for a 0
             silence_ms = get_dcf77_bit(app->dt.second) ? 200 : 100;
             furi_delay_ms(silence_ms);
+
+            // Send signal and turn led on
             furi_hal_rfid_tim_read_start(DCF77_FREQ, 0.5);
             furi_hal_pwm_start(FuriHalPwmOutputIdLptim2PA4, DCF77_FREQ, 50);
             furi_hal_light_set(LightBlue, 0xFF);
             running = true;
-        } else
+        } else {
+            // Update time on last second (0 bit is always "sent" on last second)
             set_time(app, DCF77_OFFSET + 1);
+        }
 
+        // Get current time and wait time until shortly before next second
         sec = app->dt.second;
         int wait_ms = 1000 - silence_ms - SYNC_DELAY;
         uint32_t tick_start = furi_get_tick();
+
+        // Wait and handle stuff
         while(wait_ms > 0) {
+            // Handle key inputs
             FuriStatus status = furi_message_queue_get(event_queue, &event, wait_ms);
             if((status == FuriStatusOk) && (event.type == InputTypePress)) {
                 if(event.key == InputKeyOk)
+                    // Toggle between cet and cest
                     app->is_dst = !app->is_dst;
                 else if(event.key == InputKeyBack) {
+                    // Exit
                     exit = true;
                     break;
                 }
             }
+
+            // Refresh screen
             view_port_update(view_port);
-            if(status == FuriStatusErrorTimeout) break;
+
+            // Handle other stuff
+            if(status == FuriStatusErrorTimeout) {
+                break;
+            }
             wait_ms -= furi_get_tick() - tick_start;
         }
     }
 
+    // Stop ig running
     if(running) {
         furi_hal_rfid_tim_read_stop();
         furi_hal_pwm_stop(FuriHalPwmOutputIdLptim2PA4);
         furi_hal_light_set(LightRed | LightGreen | LightBlue, 0);
     }
 
+    // Set backlight back to auto mode
     notification_message_block(notification, &sequence_display_backlight_enforce_auto);
 
+    // Close app
     view_port_enabled_set(view_port, false);
     gui_remove_view_port(gui, view_port);
     furi_record_close(RECORD_NOTIFICATION);
