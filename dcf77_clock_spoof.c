@@ -154,10 +154,10 @@ int dcf77_clock_sync_app_main(void* p) {
             // Send signal and turn led on
             furi_hal_rfid_tim_read_start(DCF77_FREQ, 0.5);
             furi_hal_pwm_start(FuriHalPwmOutputIdLptim2PA4, DCF77_FREQ, 50);
-            furi_hal_light_set(LightBlue, 0xFF);
+            furi_hal_light_set(LightRed | LightGreen, 0xFF);
             running = true;
         } else {
-            // Update time on last second (0 bit is always "sent" on last second)
+            // Update time for next minute (add offset because time of one minute later than next minute will be sent)
             set_time(app, DCF77_OFFSET + 1);
         }
 
