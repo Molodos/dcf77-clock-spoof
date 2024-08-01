@@ -9,6 +9,7 @@
 #define YEAR_BIT    50
 
 // The signal will contain the time of when the signal ends
+// Bits: 1-bit is signal, 2-bit is prepend dash for visual output and 4-bit is mark as "X" in visual output
 static uint8_t dcf77_bits[] = {
     0, // 00: Start of minute (Always 0)
     2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 01: Weather broadcast / Civil warning bits
@@ -23,7 +24,7 @@ static uint8_t dcf77_bits[] = {
     2, 0, 0, // 42: Day of week (3bit, 1-7, Monday=1)
     2, 0, 0, 0, 0, // 45: Month number (5bit, 1-12)
     2, 0, 0, 0, 0, 0, 0, 0, 0, // 50: Year within century (8bit + even parity for 36-58, 00-99)
-    2 // 59: Minute mark
+    6 // 59: Minute mark
 };
 
 void dcf77_encode(int start, int len, int val, int par) {
@@ -45,13 +46,13 @@ void dcf77_encode(int start, int len, int val, int par) {
         // XOR onto parity
         parity ^= dcf77_bit;
 
-        // Set bit in signal bits (keep flag for dash in visual output)
-        dcf77_bits[start + bit] = (dcf77_bits[start + bit] & 0x2) + dcf77_bit;
+        // Set bit in signal bits (keep flags for visual output)
+        dcf77_bits[start + bit] = (dcf77_bits[start + bit] & 0x6) + dcf77_bit;
     }
 
-    // Append parity bit if parity bit is enabled
+    // Append parity bit if parity bit is enabled (keep flags for visual output)
     if(par != 0) {
-        dcf77_bits[start + len] = (dcf77_bits[start + len] & 0x2) + (parity & 1);
+        dcf77_bits[start + len] = (dcf77_bits[start + len] & 0x6) + (parity & 1);
     }
 }
 
@@ -84,8 +85,14 @@ char* get_dcf77_data(int sec) {
         if(dcf77_bits[bit] >> 1 & 1) {
             data[idx++] = '-';
         }
-        // Set data to last bit (ascii id of 0 plus 0 or 1)
-        data[idx++] = '0' + (dcf77_bits[bit] & 1);
+
+        // Only set data is not displayed as "X"
+        if(dcf77_bits[bit] >> 2 & 1) {
+            data[idx++] = 'X';
+        } else {
+            // Set data to last bit (ascii id of 0 plus 0 or 1)
+            data[idx++] = '0' + (dcf77_bits[bit] & 1);
+        }
     }
 
     // Terminate string wit null byte and return

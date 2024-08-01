@@ -16,9 +16,10 @@
 #define SYNC_DELAY          50
 #define TIME_OFFSET_MINUTES 5
 
+// Weekday translator
 char* WEEKDAYS[] = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
 
-// App structure
+// Struct for the app
 typedef struct {
     DateTime dt;
     bool is_dst;
@@ -27,11 +28,13 @@ typedef struct {
     LocaleDateFormat dat_fmt;
 } AppData;
 
-// Draw app
+// Draw app UI
 static void app_draw_callback(Canvas* canvas, void* context) {
+    // Load app data
     AppData* app = (AppData*)context;
     furi_assert(app->str);
 
+    // Get hour and format it according to 12h/24h time format
     uint8_t hour = app->dt.hour;
     bool fmt_12h = false;
     if(app->tim_fmt == LocaleTimeFormat12h) {
@@ -39,40 +42,47 @@ static void app_draw_callback(Canvas* canvas, void* context) {
         fmt_12h = true;
     }
 
+    // Create string for displayed time
     furi_string_printf(app->str, "%2u:%02u:%02u", hour, app->dt.minute, app->dt.second);
     const char* tim_cstr = furi_string_get_cstr(app->str);
 
+    // Print time string to UI
     canvas_set_font(canvas, FontBigNumbers);
     canvas_draw_str_aligned(
         canvas, SCREEN_SIZE_X / 2, SCREEN_SIZE_Y / 2, AlignCenter, AlignCenter, tim_cstr);
 
+    // Print AM/PM to the UI for 12h format
     if(fmt_12h) {
         canvas_set_font(canvas, FontSecondary);
         canvas_draw_str_aligned(
             canvas,
-            0,
-            (SCREEN_SIZE_Y / 2) - 7,
-            AlignLeft,
+            SCREEN_SIZE_X,
+            (SCREEN_SIZE_Y / 2),
+            AlignRight,
             AlignTop,
             (app->dt.hour >= 12 ? "PM" : "AM"));
     }
 
+    // Create the date string ("lite")
     FuriString* dat = furi_string_alloc();
     locale_format_date(dat, &app->dt, app->dat_fmt, "-");
+
+    // Create strings for weekday and dst
     const char* dow_str = WEEKDAYS[(app->dt.weekday - 1) % 7];
     const char* dst_str = app->is_dst ? "CEST" : "CET";
+
+    // Combine to overall date string and free "lite" date string
     furi_string_printf(app->str, "%s %s %s", dow_str, furi_string_get_cstr(dat), dst_str);
     furi_string_free(dat);
 
+    // Print date string to the UI
     canvas_set_font(canvas, FontSecondary);
     canvas_draw_str_aligned(
         canvas, SCREEN_SIZE_X / 2, 0, AlignCenter, AlignTop, furi_string_get_cstr(app->str));
 
-    if(app->dt.second < 59) {
-        char* data = get_dcf77_data(app->dt.second);
-        canvas_draw_str_aligned(
-            canvas, SCREEN_SIZE_X, SCREEN_SIZE_Y, AlignRight, AlignBottom, data);
-    }
+    // Print signal data string to the UI
+    char* data = get_dcf77_data(app->dt.second);
+    canvas_draw_str_aligned(canvas, SCREEN_SIZE_X, SCREEN_SIZE_Y, AlignRight, AlignBottom, data);
 }
 
 static void app_input_callback(InputEvent* input_event, void* ctx) {

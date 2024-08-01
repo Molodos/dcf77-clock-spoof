@@ -8,18 +8,18 @@ Uses PWM with frequency of 77.5 kHz on the GPIO pin to simulate the signal.
 
 ## Usage
 
-Normally the clock gets syncrhonized in two to five minutes depending on the signal strength.
+Normally the clock gets synchronized in two to five minutes depending on the signal strength.
 
-The OK button changes the transmitted signal between CET and CEST (dst) time.
+The OK button changes the transmitted signal between CEST (dst) and CET time.
 
 ## Antenna
 
-The RFID antenna wokrs best at distances of up to 50cm. The signal gets recognized in few seconds.
+The RFID antenna works best at distances of up to 50cm. The signal gets recognized in few seconds.
 
 When using the GPIO, best results are achieved if you connect a ferrite antenna over 330 ohm resistor and a capactior to ground.
 
 It also works with analog beeper or small in-ear headphone connected to the GPIO pin.
 
-## Thanks
+## Note
 
-This is a fork of https://github.com/mdaskalov/dcf77-clock-sync. Thanks for doing the hard work!
+This is a fork of https://github.com/mdaskalov/dcf77-clock-sync. Thanks to @mdaskalov for doing the initial work!
