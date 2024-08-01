@@ -26,7 +26,22 @@ typedef struct {
     LocaleTimeFormat tim_fmt;
     LocaleDateFormat dat_fmt;
     uint32_t time_offset;
+    int selection;
+    bool blink_led;
 } AppData;
+
+/**
+ * Draw an arrow
+ * @param canvas Canvas to draw to
+ * @param x X
+ * @param y Y
+ * @param up To make the arrow point upwards
+ */
+static void canvas_draw_arrow(Canvas* canvas, int32_t x, int32_t y, bool up) {
+    canvas_draw_box(canvas, x + 2, y + (up ? 0 : 2), 2, 1);
+    canvas_draw_box(canvas, x + 1, y + 1, 4, 1);
+    canvas_draw_box(canvas, x, y + (up ? 2 : 0), 6, 1);
+}
 
 /**
  * Draw the apps UI
@@ -87,6 +102,13 @@ static void app_draw_callback(Canvas* canvas, void* context) {
     // Print signal data string to the UI
     char* data = get_dcf77_data(app->dt.second);
     canvas_draw_str_aligned(canvas, SCREEN_SIZE_X, SCREEN_SIZE_Y, AlignRight, AlignBottom, data);
+
+    // Add markers for selection
+    if(app->selection > 0) {
+        canvas_set_color(canvas, ColorBlack);
+        canvas_draw_arrow(canvas, 19 + 36 * (app->selection - 1), SCREEN_SIZE_Y / 2 + 8, true);
+        canvas_draw_arrow(canvas, 31 + 36 * (app->selection - 1), SCREEN_SIZE_Y / 2 + 8, false);
+    }
 }
 
 /**
@@ -154,7 +176,9 @@ int dcf77_clock_sync_app_main(void* p) {
     app->str = furi_string_alloc();
     app->tim_fmt = locale_get_time_format();
     app->dat_fmt = locale_get_date_format();
-    app->time_offset = 5 * 60;
+    app->time_offset = 0;
+    app->selection = 0;
+    app->blink_led = true;
     update_offset_datetime(app);
 
     // Set the current signal time (add offset of one minute because signal of next minute is sent)
@@ -184,6 +208,9 @@ int dcf77_clock_sync_app_main(void* p) {
     // Current second
     int sec = app->dt.second;
 
+    // Settings backup
+    uint32_t offset = app->time_offset;
+
     // Main app loop
     while(!exit) {
         // Silence between signals
@@ -199,7 +226,9 @@ int dcf77_clock_sync_app_main(void* p) {
             // Stop if running
             if(running) {
                 // Turn led off
-                furi_hal_light_set(LightRed | LightGreen | LightBlue, 0);
+                if(app->blink_led) {
+                    furi_hal_light_set(LightRed | LightGreen | LightBlue, 0);
+                }
 
                 // Stop signal
                 furi_hal_rfid_tim_read_stop();
@@ -212,12 +241,14 @@ int dcf77_clock_sync_app_main(void* p) {
             silence_ms = get_dcf77_bit(app->dt.second) ? 200 : 100;
             furi_delay_ms(silence_ms);
 
-            // Send signaln
+            // Send signal
             furi_hal_rfid_tim_read_start(DCF77_FREQ, 0.5);
             furi_hal_pwm_start(FuriHalPwmOutputIdLptim2PA4, DCF77_FREQ, 50);
 
             // Turn led on
-            furi_hal_light_set(LightRed | LightGreen, 0xFF);
+            if(app->blink_led) {
+                furi_hal_light_set(LightRed | LightGreen, 0xFF);
+            }
 
             // Set flag that signal is bein sent
             running = true;
@@ -231,18 +262,65 @@ int dcf77_clock_sync_app_main(void* p) {
         int wait_ms = 1000 - silence_ms - SYNC_DELAY;
         uint32_t tick_start = furi_get_tick();
 
+        // Number of selectible parts
+        int max_selection = 3;
+
         // Wait and handle stuff
         while((int)(furi_get_tick() - tick_start) < wait_ms) {
             // Handle key inputs
             FuriStatus status = furi_message_queue_get(event_queue, &event, wait_ms);
             if(status == FuriStatusOk && event.type == InputTypePress) {
-                if(event.key == InputKeyOk)
-                    // Toggle between cest and cet
-                    app->is_dst = !app->is_dst;
-                else if(event.key == InputKeyBack) {
-                    // Signal to exit
-                    exit = true;
-                    break;
+                if(event.key == InputKeyBack) {
+                    if(app->selection != 0) {
+                        // End without saving if in edit mode (restore settings backup)
+                        app->time_offset = offset;
+                        update_offset_datetime(app);
+                        app->selection = 0;
+                    } else {
+                        // Signal to exit if not in edit mode
+                        exit = true;
+                        break;
+                    }
+                } else if(event.key == InputKeyRight) {
+                    // Circle selection
+                    app->selection = app->selection == max_selection ? 1 : app->selection + 1;
+                } else if(event.key == InputKeyLeft) {
+                    // Circle selection
+                    app->selection = app->selection <= 1 ? max_selection : app->selection - 1;
+                } else if(event.key == InputKeyOk) {
+                    if(app->selection != 0) {
+                        // End with saving if in edit mode (update settings backup)
+                        offset = app->time_offset;
+                        app->selection = 0;
+                    } else {
+                        // Toggle LED if not in edit mode
+                        app->blink_led = !app->blink_led;
+                        if(!app->blink_led) {
+                            furi_hal_light_set(LightRed | LightGreen | LightBlue, 0);
+                        }
+                    }
+                } else if(event.key == InputKeyUp) {
+                    if(app->selection == 1) {
+                        app->time_offset += 60 * 60;
+                    } else if(app->selection == 2) {
+                        app->time_offset += 60;
+                    } else if(app->selection == 3) {
+                        app->time_offset += 1;
+                    } else if(app->selection == 0) {
+                        app->is_dst = !app->is_dst;
+                    }
+                    update_offset_datetime(app);
+                } else if(event.key == InputKeyDown) {
+                    if(app->selection == 1) {
+                        app->time_offset -= 60 * 60;
+                    } else if(app->selection == 2) {
+                        app->time_offset -= 60;
+                    } else if(app->selection == 3) {
+                        app->time_offset -= 1;
+                    } else if(app->selection == 0) {
+                        app->is_dst = !app->is_dst;
+                    }
+                    update_offset_datetime(app);
                 }
             }
 
@@ -260,7 +338,10 @@ int dcf77_clock_sync_app_main(void* p) {
     if(running) {
         furi_hal_rfid_tim_read_stop();
         furi_hal_pwm_stop(FuriHalPwmOutputIdLptim2PA4);
-        furi_hal_light_set(LightRed | LightGreen | LightBlue, 0);
+
+        if(app->blink_led) {
+            furi_hal_light_set(LightRed | LightGreen | LightBlue, 0);
+        }
     }
 
     // Disable the viewport
