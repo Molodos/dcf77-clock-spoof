@@ -9,12 +9,11 @@
 
 #include "dcf77.h"
 
-#define SCREEN_SIZE_X       128
-#define SCREEN_SIZE_Y       64
-#define DCF77_FREQ          77500
-#define DCF77_OFFSET        60
-#define SYNC_DELAY          50
-#define TIME_OFFSET_MINUTES 5
+#define SCREEN_SIZE_X 128
+#define SCREEN_SIZE_Y 64
+#define DCF77_FREQ    77500
+#define DCF77_OFFSET  60
+#define SYNC_DELAY    50
 
 // Weekday translator
 char* WEEKDAYS[] = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
@@ -26,9 +25,14 @@ typedef struct {
     FuriString* str;
     LocaleTimeFormat tim_fmt;
     LocaleDateFormat dat_fmt;
+    uint32_t time_offset;
 } AppData;
 
-// Draw app UI
+/**
+ * Draw the apps UI
+ * @param canvas The canvas of the UI to draw to
+ * @param context Context (the app data)
+ */
 static void app_draw_callback(Canvas* canvas, void* context) {
     // Load app data
     AppData* app = (AppData*)context;
@@ -85,72 +89,123 @@ static void app_draw_callback(Canvas* canvas, void* context) {
     canvas_draw_str_aligned(canvas, SCREEN_SIZE_X, SCREEN_SIZE_Y, AlignRight, AlignBottom, data);
 }
 
-static void app_input_callback(InputEvent* input_event, void* ctx) {
-    furi_assert(ctx);
-    FuriMessageQueue* event_queue = ctx;
+/**
+ * Handle an input event
+ * @param input_event The input event to handle
+ * @param context Context (the message queue)
+ */
+static void app_input_callback(InputEvent* input_event, void* context) {
+    // Get the event ant put it into the context message queue
+    furi_assert(context);
+    FuriMessageQueue* event_queue = context;
     furi_message_queue_put(event_queue, input_event, FuriWaitForever);
 }
 
-void set_time(AppData* app, int offset) {
+/**
+ * Set time for dcf77 converter
+ * @param app The app data
+ * @param offset The time offset to current time in seconds
+ */
+void set_signal_time(AppData* app, int offset) {
+    // Prepare date
     DateTime dcf_dt;
+
+    // Get time and add offset because a later time will be transmitted
     uint32_t timestamp = datetime_datetime_to_timestamp(&app->dt) + offset;
+
+    // Convert timestamp to date and date to dcf77 signal
     datetime_timestamp_to_datetime(timestamp, &dcf_dt);
     set_dcf77_time(&dcf_dt, app->is_dst);
 }
 
-// Get datetime with offset
-void get_offset_datetime(DateTime* datetime) {
+/**
+ * Get datetime current offset
+ * @param app The app to update datetime for
+ */
+void update_offset_datetime(AppData* app) {
+    // Set offset time to current time from flipper
     DateTime offset_time;
     furi_hal_rtc_get_datetime(&offset_time);
-    uint32_t unix_timestamp =
-        datetime_datetime_to_timestamp(&offset_time) + TIME_OFFSET_MINUTES * 60;
+
+    // Get unix timestamp
+    uint32_t unix_timestamp = datetime_datetime_to_timestamp(&offset_time);
+
+    // Add offset
+    unix_timestamp += app->time_offset;
+
+    // Save to offset time
     datetime_timestamp_to_datetime(unix_timestamp, &offset_time);
-    *datetime = offset_time;
+
+    // Write to
+    app->dt = offset_time;
 }
 
+/**
+ * Init point of the app
+ * @param p Args (I guess)
+ */
 int dcf77_clock_sync_app_main(void* p) {
+    // Ignore args
     UNUSED(p);
 
+    // Init app data struct
     AppData* app = malloc(sizeof(AppData));
-    get_offset_datetime(&app->dt);
     app->is_dst = true;
     app->str = furi_string_alloc();
     app->tim_fmt = locale_get_time_format();
     app->dat_fmt = locale_get_date_format();
+    app->time_offset = 5 * 60;
+    update_offset_datetime(app);
 
-    set_time(app, DCF77_OFFSET);
+    // Set the current signal time (add offset of one minute because signal of next minute is sent)
+    set_signal_time(app, DCF77_OFFSET);
 
+    // Create viewport as well as message queue for input events (max 8 events)
     ViewPort* view_port = view_port_alloc();
     FuriMessageQueue* event_queue = furi_message_queue_alloc(8, sizeof(InputEvent));
 
+    // Set viewport callbacks for drawing the UI and handling input events (using app and event queue as context parameters)
     view_port_draw_callback_set(view_port, app_draw_callback, app);
     view_port_input_callback_set(view_port, app_input_callback, event_queue);
 
+    // Create gui and display already created viewport
     Gui* gui = furi_record_open(RECORD_GUI);
     gui_add_view_port(gui, view_port, GuiLayerFullscreen);
 
+    // Enforce backlight to stay on
     NotificationApp* notification = furi_record_open(RECORD_NOTIFICATION);
     notification_message_block(notification, &sequence_display_backlight_enforce_on);
 
+    // Event store for later
     InputEvent event;
+
+    // Flag to show that signal is being sent
     bool running = false;
+
+    // Flag to show that user pressed back
     bool exit = false;
+
+    // Current second
     int sec = app->dt.second;
+
+    // Main app loop
     while(!exit) {
-        // Define variable
+        // Silence between signals
         int silence_ms = 0;
 
-        // Wait for next second
+        // Wait until next second starts
         while(app->dt.second == sec) {
-            get_offset_datetime(&app->dt);
+            update_offset_datetime(app);
         }
 
         // Control antennas
         if(app->dt.second < 59) {
             // Stop if running
             if(running) {
-                // Turn led off and stop everything
+                // Turn led off
                 furi_hal_light_set(LightRed | LightGreen | LightBlue, 0);
+
+                // Stop signal
                 furi_hal_rfid_tim_read_stop();
                 furi_hal_pwm_stop(FuriHalPwmOutputIdLptim2PA4);
                 furi_hal_gpio_init(
@@ -161,31 +216,35 @@ int dcf77_clock_sync_app_main(void* p) {
             silence_ms = get_dcf77_bit(app->dt.second) ? 200 : 100;
             furi_delay_ms(silence_ms);
 
-            // Send signal and turn led on
+            // Send signaln
             furi_hal_rfid_tim_read_start(DCF77_FREQ, 0.5);
             furi_hal_pwm_start(FuriHalPwmOutputIdLptim2PA4, DCF77_FREQ, 50);
+
+            // Turn led on
             furi_hal_light_set(LightRed | LightGreen, 0xFF);
+
+            // Set flag that signal is bein sent
             running = true;
         } else {
             // Update time for next minute (add offset because time of one minute later than next minute will be sent)
-            set_time(app, DCF77_OFFSET + 1);
+            set_signal_time(app, DCF77_OFFSET + 1);
         }
 
-        // Get current time and wait time until shortly before next second
+        // Get current time and calculate wait time until just before next second
         sec = app->dt.second;
         int wait_ms = 1000 - silence_ms - SYNC_DELAY;
         uint32_t tick_start = furi_get_tick();
 
         // Wait and handle stuff
-        while(wait_ms > 0) {
+        while((int)(furi_get_tick() - tick_start) < wait_ms) {
             // Handle key inputs
             FuriStatus status = furi_message_queue_get(event_queue, &event, wait_ms);
-            if((status == FuriStatusOk) && (event.type == InputTypePress)) {
+            if(status == FuriStatusOk && event.type == InputTypePress) {
                 if(event.key == InputKeyOk)
-                    // Toggle between cet and cest
+                    // Toggle between cest and cet
                     app->is_dst = !app->is_dst;
                 else if(event.key == InputKeyBack) {
-                    // Exit
+                    // Signal to exit
                     exit = true;
                     break;
                 }
@@ -198,11 +257,10 @@ int dcf77_clock_sync_app_main(void* p) {
             if(status == FuriStatusErrorTimeout) {
                 break;
             }
-            wait_ms -= furi_get_tick() - tick_start;
         }
     }
 
-    // Stop ig running
+    // Stop if running
     if(running) {
         furi_hal_rfid_tim_read_stop();
         furi_hal_pwm_stop(FuriHalPwmOutputIdLptim2PA4);
@@ -212,16 +270,22 @@ int dcf77_clock_sync_app_main(void* p) {
     // Set backlight back to auto mode
     notification_message_block(notification, &sequence_display_backlight_enforce_auto);
 
-    // Close app
+    // Disable the viewport
     view_port_enabled_set(view_port, false);
     gui_remove_view_port(gui, view_port);
+
+    // Close records previously opened
     furi_record_close(RECORD_NOTIFICATION);
     furi_record_close(RECORD_GUI);
+
+    // Free input event queue and viewport
     furi_message_queue_free(event_queue);
     view_port_free(view_port);
 
+    // Free string in app data as well as app data itself
     furi_string_free(app->str);
     free(app);
 
+    // Exit normally
     return 0;
 }

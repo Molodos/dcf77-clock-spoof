@@ -27,6 +27,13 @@ static uint8_t dcf77_bits[] = {
     6 // 59: Minute mark
 };
 
+/**
+ * Encode a value into a part of a dcf77 signal
+ * @param start Index where the encoded value should start in the sinal bits array
+ * @param len Number of bits in the encoded value
+ * @param val The value to be encoded
+ * @param par The parity flag (0 top disable parity, 1 for even parity bit to be appended to the encoded value, -1 for even parity bit to be appended to the encoded value but being based on the value currently in the first position in the signal bits (overflow from before))
+ */
 void dcf77_encode(int start, int len, int val, int par) {
     // Set parity init bit
     uint8_t parity = 0;
@@ -56,14 +63,14 @@ void dcf77_encode(int start, int len, int val, int par) {
     }
 }
 
-void set_dcf77_time(DateTime* dt, bool is_dst) {
+void set_dcf77_time(DateTime* datetime, bool is_dst) {
     dcf77_encode(DST_BIT, 2, is_dst > 0 ? 0b01 : 0b10, 0); // Disable parity
-    dcf77_encode(MIN_BIT, 7, dt->minute, 1);
-    dcf77_encode(HOUR_BIT, 6, dt->hour, 1);
-    dcf77_encode(DAY_BIT, 6, dt->day, 1);
-    dcf77_encode(WEEKDAY_BIT, 3, dt->weekday, -1); // Use first bit as parity init
-    dcf77_encode(MONTH_BIT, 5, dt->month, -1); // Use first bit as parity init
-    dcf77_encode(YEAR_BIT, 8, dt->year % 100, -1); // Use first bit as parity init
+    dcf77_encode(MIN_BIT, 7, datetime->minute, 1);
+    dcf77_encode(HOUR_BIT, 6, datetime->hour, 1);
+    dcf77_encode(DAY_BIT, 6, datetime->day, 1);
+    dcf77_encode(WEEKDAY_BIT, 3, datetime->weekday, -1); // Use first bit as parity init
+    dcf77_encode(MONTH_BIT, 5, datetime->month, -1); // Use first bit as parity init
+    dcf77_encode(YEAR_BIT, 8, datetime->year % 100, -1); // Use first bit as parity init
 }
 
 bool get_dcf77_bit(int sec) {
