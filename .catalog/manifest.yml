@@ -9,3 +9,4 @@ changelog: "@.catalog/changelog.md"
 author: "Molodos"
 screenshots:
   - ".catalog/screens/1.png"
+  - ".catalog/screens/2.png"
