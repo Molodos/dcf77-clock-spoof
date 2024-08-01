@@ -172,10 +172,6 @@ int dcf77_clock_sync_app_main(void* p) {
     Gui* gui = furi_record_open(RECORD_GUI);
     gui_add_view_port(gui, view_port, GuiLayerFullscreen);
 
-    // Enforce backlight to stay on
-    NotificationApp* notification = furi_record_open(RECORD_NOTIFICATION);
-    notification_message_block(notification, &sequence_display_backlight_enforce_on);
-
     // Event store for later
     InputEvent event;
 
@@ -267,15 +263,11 @@ int dcf77_clock_sync_app_main(void* p) {
         furi_hal_light_set(LightRed | LightGreen | LightBlue, 0);
     }
 
-    // Set backlight back to auto mode
-    notification_message_block(notification, &sequence_display_backlight_enforce_auto);
-
     // Disable the viewport
     view_port_enabled_set(view_port, false);
     gui_remove_view_port(gui, view_port);
 
     // Close records previously opened
-    furi_record_close(RECORD_NOTIFICATION);
     furi_record_close(RECORD_GUI);
 
     // Free input event queue and viewport
