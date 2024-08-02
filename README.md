@@ -1,6 +1,6 @@
 # Flipper-Zero DCF77 Clock Spoof
 
-Spoofs a [DCF77](https://en.wikipedia.org/wiki/DCF77) time signal of a selectable time on the RFID antenna and on GPIO A4 pin.
+Spoofs a [DCF77](https://en.wikipedia.org/wiki/DCF77) time signal of a selectable time on the RFID antenna and on GPIO 7 pin.
 
 Uses PWM with frequency of 77.5 kHz on the GPIO pin to simulate the signal.
 
