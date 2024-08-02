@@ -11,5 +11,5 @@ App(
     fap_author="Molodos",
     fap_weburl="https://github.com/molodos/dcf77-clock-spoof",
     fap_version="1.1",
-    fap_description="Spoof a DCF77 time signal with a selectable time on the RFID antenna and the GPIO 10 pin",
+    fap_description="Spoof a DCF77 time signal with a selectable time on the RFID antenna and the GPIO A4 pin",
 )

@@ -232,7 +232,7 @@ int dcf77_clock_sync_app_main(void* p) {
 
                 // Stop signal
                 furi_hal_rfid_tim_read_stop();
-                furi_hal_pwm_stop(FuriHalPwmOutputIdTim1PA7);
+                furi_hal_pwm_stop(FuriHalPwmOutputIdLptim2PA4);
                 furi_hal_gpio_init(
                     &gpio_ext_pa4, GpioModeOutputPushPull, GpioPullNo, GpioSpeedVeryHigh);
             }
@@ -243,7 +243,7 @@ int dcf77_clock_sync_app_main(void* p) {
 
             // Send signal
             furi_hal_rfid_tim_read_start(DCF77_FREQ, 0.5);
-            furi_hal_pwm_start(FuriHalPwmOutputIdTim1PA7, DCF77_FREQ, 50);
+            furi_hal_pwm_start(FuriHalPwmOutputIdLptim2PA4, DCF77_FREQ, 50);
 
             // Turn led on
             if(app->blink_led) {
@@ -337,7 +337,7 @@ int dcf77_clock_sync_app_main(void* p) {
     // Stop if running
     if(running) {
         furi_hal_rfid_tim_read_stop();
-        furi_hal_pwm_stop(FuriHalPwmOutputIdTim1PA7);
+        furi_hal_pwm_stop(FuriHalPwmOutputIdLptim2PA4);
 
         if(app->blink_led) {
             furi_hal_light_set(LightRed | LightGreen | LightBlue, 0);

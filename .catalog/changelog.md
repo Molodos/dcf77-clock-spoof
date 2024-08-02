@@ -4,4 +4,4 @@
 
 ## Version 1.1
 
-- Changed external antenna pin from GPIO4 to GPIO7
+- TODO
